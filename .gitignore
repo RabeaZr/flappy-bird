@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Node / Vite / React
+node_modules/
+dist/
+build/
+
+# Mobile builds (if any)
+android/build/
+android/app/build/
+ios/build/
+ios/Pods/
+
+# Env
+.env
+.env.*
