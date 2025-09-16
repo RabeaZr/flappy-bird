@@ -283,7 +283,23 @@ export default function FlappyMobile() {
           state.pipeTimer = 0;
           const minTop = 40;
           const maxTop = floorY - gap - 40;
-          const topH = Math.max(minTop, Math.min(maxTop, minTop + rand01() * (maxTop - minTop)));
+          
+          // Get the previous pipe's gap center position
+          const prevPipe = state.pipes[state.pipes.length - 1];
+          let prevGapCenter = h / 2; // Default to middle for first pipe
+          if (prevPipe) {
+              prevGapCenter = prevPipe.baseTop + (prevPipe.gap / 2);
+          }
+          
+          // Limit vertical distance to 60% of screen height
+          const maxVerticalChange = h * 0.6;
+          const minNewCenter = Math.max(minTop + (gap / 2), prevGapCenter - maxVerticalChange);
+          const maxNewCenter = Math.min(maxTop - (gap / 2), prevGapCenter + maxVerticalChange);
+          
+          // Calculate the new gap position within these constraints
+          const gapCenter = minNewCenter + rand01() * (maxNewCenter - minNewCenter);
+          const topH = gapCenter - (gap / 2);
+          
           const movingChance = 0.35;
           const canAmp = Math.max(0, (maxTop - minTop - 20) / 2);
           const oscAmp = rand01() < movingChance && canAmp > 12 ? Math.min(50, canAmp) : 0;
