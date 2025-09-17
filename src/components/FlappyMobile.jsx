@@ -128,12 +128,18 @@ export default function FlappyMobile() {
       state.pipeTimer = 0;
       state.bird.vy = 0;
       state.bird.y = state.world.h * 0.45;
+      state.bird.x = 120; // Reset x position
+      state.bird.rotation = 0; // Reset rotation
+      state.originalX = 120; // Reset original position
       state.effects.shield = 0;
       state.effects.slow = 0;
       state.effects.magnet = 0;
       state.effects.double = 0;
       state.effects.invuln = 0;
       state.effects.timeScale = 1;
+      state.effects.wind = 0; // Reset wind effect
+      state.windStart = null; // Reset wind timer
+      state.previousScore = 0; // Reset score tracking
       state.elapsed = 0;
       scheduleNexts(true);
     }
@@ -147,12 +153,18 @@ export default function FlappyMobile() {
       state.powerups = [];
       state.score = 0;
       state.stars = 0;
+      state.bird.x = 120; // Reset x position
+      state.bird.rotation = 0; // Reset rotation
+      state.originalX = 120; // Reset original position
       state.effects.shield = 0;
       state.effects.slow = 0;
       state.effects.magnet = 0;
       state.effects.double = 0;
       state.effects.invuln = 0;
       state.effects.timeScale = 1;
+      state.effects.wind = 0; // Reset wind effect
+      state.windStart = null; // Reset wind timer
+      state.previousScore = 0; // Reset score tracking
       state.elapsed = 0;
       state.rngSeed = Math.floor(Math.random() * 1e9);
       scheduleNexts(true);
@@ -273,9 +285,71 @@ export default function FlappyMobile() {
       }
 
       if (state.gameState === "playing") {
-        // bird physics
+        // Track previous score to ensure we don't miss wind triggers
+        state.previousScore = state.previousScore || 0;
+        
+        // Initialize original x position if not set
+        state.originalX = state.originalX || 120;
+        
+        // Check for crossing a multiple of 25 (checking each point to catch all triggers)
+        if (state.score > 0 && state.score !== state.previousScore) {
+          const prevMult25 = Math.floor(state.previousScore / 25);
+          const currMult25 = Math.floor(state.score / 25);
+          
+          if (currMult25 > prevMult25) {
+            // Start new wind phase at exactly multiple of 25
+            state.windStart = state.elapsed;
+            if (!ui.muted) sound.playWind();
+          }
+          state.previousScore = state.score;
+        }
+        
+        // Wind effect calculation
+        const windDuration = 1.5; // wind lasts for 1.5 seconds
+        if (state.windStart && state.elapsed - state.windStart < windDuration) {
+          // Create a smooth displacement and return curve
+          const progress = (state.elapsed - state.windStart) / windDuration;
+          
+          // Calculate wind strength based on score
+          // Start at 40 pixels, increase by 5 pixels every 25 points, max out at 70 pixels
+          const baseDisplacement = 40;
+          const scoreBonus = Math.min(30, Math.floor(state.score / 25) * 5);
+          const maxDisplacement = baseDisplacement + scoreBonus;
+          
+          // This creates a curve that goes up and comes back to 0
+          const displacement = Math.sin(progress * Math.PI * 2) * maxDisplacement;
+          
+          // Apply the displacement directly
+          state.effects.wind = displacement - (state.bird.x - state.originalX);
+        } else {
+          state.effects.wind = 0;
+          state.windStart = null;
+        }
+
+        // bird physics with spring-like wind effect
         state.bird.vy += g * dt;
         state.bird.y += state.bird.vy * dt;
+        
+        // Apply wind as a spring force
+        const displacement = state.bird.x - state.originalX;
+        if (state.effects.wind) {
+          // The wind effect is now a direct position offset
+          const windForce = state.effects.wind * 8 * dt; // Spring force
+          state.bird.x += windForce;
+          
+          // Rotation based on displacement from original position
+          state.bird.rotation = displacement * 0.005; // Subtle rotation
+        }
+        
+        // Always apply a gentle return force to original position
+        const returnForce = displacement * 2 * dt;
+        state.bird.x -= returnForce;
+        
+        if (!state.effects.wind) {
+          state.bird.rotation = 0;
+        } else {
+          state.bird.rotation = 0;
+        }
 
         // spawn pipes (with dynamic interval)
         state.pipeTimer += dt * 1000;
@@ -540,9 +614,45 @@ export default function FlappyMobile() {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      // Parallax clouds
+      // Regular cloud drawing (no wind effect on clouds)
       drawCloud(ctx, (state.now / 40) % (w + 120) - 120, h * 0.2, 1.0);
       drawCloud(ctx, (state.now / 60) % (w + 160) - 160, h * 0.35, 0.8);
+      
+      // Improved wind effect visualization
+      if (state.windStart && state.elapsed - state.windStart < 1.5) {
+        ctx.save();
+        const progress = (state.elapsed - state.windStart) / 1.5;
+        const envelope = Math.sin(progress * Math.PI);
+        ctx.globalAlpha = Math.min(1, 0.7 * envelope);
+        
+        // Create multiple wind streaks
+        const numStreaks = 12;
+        const baseSpeed = state.now / 200;
+        
+        for (let i = 0; i < numStreaks; i++) {
+          const y = (h * 0.2) + (h * 0.6 * (i / numStreaks));
+          const xOffset = (baseSpeed + i * 50) % (w + 100);
+          const x = -50 + xOffset;
+          
+          ctx.strokeStyle = "#b4e5ff";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          
+          // Create curved wind lines
+          ctx.moveTo(x, y);
+          const length = 40 + Math.sin(state.now / 500 + i) * 10;
+          const curve = Math.sin(state.now / 300 + i) * 5;
+          
+          ctx.bezierCurveTo(
+            x + length * 0.33, y + curve,
+            x + length * 0.66, y - curve,
+            x + length, y
+          );
+          
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       // Pipes (themed)
       for (const p of state.pipes) {
@@ -589,7 +699,8 @@ export default function FlappyMobile() {
       const tilt = Math.max(-0.5, Math.min(0.5, state.bird.vy / 600));
       ctx.save();
       ctx.translate(state.bird.x, state.bird.y);
-      ctx.rotate(tilt);
+      // Combine vertical tilt with wind-based rotation
+      ctx.rotate(tilt + (state.bird.rotation || 0));
       drawBird(ctx, r);
       // shield aura
       if (state.effects.shield > 0) {

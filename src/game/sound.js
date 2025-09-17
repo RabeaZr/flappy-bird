@@ -58,6 +58,46 @@ export function initSoundEngine(ui) {
       this._beep(240, 0.1, "square", 0, this.sfx);
       this._beep(360, 0.12, "sine", 0.03, this.sfx);
     },
+    playWind() {
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      const duration = 1.0;
+      
+      // Create noise for wind sound
+      const bufferSize = this.ctx.sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      // Generate noise with varying intensity
+      for (let i = 0; i < bufferSize; i++) {
+        const progress = i / bufferSize;
+        const envelope = Math.sin(progress * Math.PI); // Smooth fade in/out
+        data[i] = (Math.random() * 2 - 1) * envelope * 0.5;
+      }
+      
+      // Play the noise with a filter sweep
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      
+      // Add filter for whoosh effect
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(100, now);
+      filter.frequency.linearRampToValueAtTime(2000, now + duration * 0.5);
+      filter.frequency.linearRampToValueAtTime(100, now + duration);
+      filter.Q.value = 1.5;
+      
+      // Connect and play
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.15, now);
+      
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.sfx);
+      
+      noise.start(now);
+      noise.stop(now + duration);
+    },
     startMusic() {
       if (!this.ctx || this.musicTimer) return;
       const bpm = 160;
